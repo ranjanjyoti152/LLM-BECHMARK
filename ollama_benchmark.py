@@ -67,35 +67,48 @@ class OllamaBenchmark:
                 print("Please enter a valid number.")
     
     def get_system_info(self) -> Dict[str, str]:
-        """Get system information including GPU details"""
+        """Get system information including GPU details, supporting multiple GPUs"""
         info = {
             'software': 'Ollama',
             'gpu': 'N/A',
             'driver_version': 'N/A',
             'cuda_version': 'N/A'
         }
-        
         try:
             # Get GPU information using nvidia-smi
             try:
-                result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader,nounits'], 
-                                      capture_output=True, text=True, timeout=10)
+                result = subprocess.run([
+                    'nvidia-smi', '--query-gpu=name', '--format=csv,noheader,nounits'
+                ], capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
-                    gpu_name = result.stdout.strip()
-                    if gpu_name:
-                        info['gpu'] = gpu_name
-            except:
+                    gpu_names = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+                    if gpu_names:
+                        unique_gpus = list(dict.fromkeys(gpu_names))
+                        gpu_count = len(gpu_names)
+                        if len(unique_gpus) == 1:
+                            info['gpu'] = f"{gpu_count}x {unique_gpus[0]}" if gpu_count > 1 else unique_gpus[0]
+                        else:
+                            # Multiple different GPUs, list all with counts
+                            from collections import Counter
+                            counts = Counter(gpu_names)
+                            info['gpu'] = ', '.join([
+                                f"{count}x {name}" if count > 1 else name for name, count in counts.items()
+                            ])
+            except Exception:
                 pass
-            
             # Get NVIDIA driver version
             try:
-                result = subprocess.run(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader,nounits'], 
-                                      capture_output=True, text=True, timeout=10)
+                result = subprocess.run([
+                    'nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader,nounits'
+                ], capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
-                    info['driver_version'] = result.stdout.strip()
-            except:
+                    driver_versions = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+                    # If all driver versions are the same, just show one
+                    if driver_versions:
+                        unique_versions = list(dict.fromkeys(driver_versions))
+                        info['driver_version'] = unique_versions[0] if len(unique_versions) == 1 else ', '.join(unique_versions)
+            except Exception:
                 pass
-            
             # Get CUDA version
             try:
                 result = subprocess.run(['nvcc', '--version'], capture_output=True, text=True, timeout=10)
@@ -107,12 +120,10 @@ class OllamaBenchmark:
                             if len(parts) > 1:
                                 info['cuda_version'] = parts[1].split(',')[0].strip()
                             break
-            except:
+            except Exception:
                 pass
-                
         except Exception as e:
             print(f"Warning: Could not get complete system info: {e}")
-        
         return info
     
     def monitor_vram_usage(self, duration: int) -> float:
