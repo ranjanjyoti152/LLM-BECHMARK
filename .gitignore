@@ -56,5 +56,6 @@ Thumbs.db
 
 # Results and output files
 ollama_benchmark_results.*
+ollama_multiuser_benchmark_results.*
 benchmark_results.*
 results.*
