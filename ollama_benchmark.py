@@ -126,21 +126,60 @@ class OllamaBenchmark:
             print(f"Warning: Could not get complete system info: {e}")
         return info
     
+    def get_current_vram_usage(self) -> Dict[str, float]:
+        """Get current VRAM usage for all GPUs"""
+        vram_usage = {}
+        try:
+            # Get VRAM usage for all GPUs
+            result = subprocess.run(['nvidia-smi', '--query-gpu=index,memory.used,memory.total', '--format=csv,noheader,nounits'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                total_used = 0
+                for line in lines:
+                    if line.strip():
+                        try:
+                            parts = line.strip().split(', ')
+                            if len(parts) >= 3:
+                                gpu_index = int(parts[0])
+                                memory_used = float(parts[1])
+                                memory_total = float(parts[2])
+                                vram_usage[f'gpu_{gpu_index}'] = {
+                                    'used': memory_used,
+                                    'total': memory_total,
+                                    'utilization': (memory_used / memory_total * 100) if memory_total > 0 else 0
+                                }
+                                total_used += memory_used
+                        except (ValueError, IndexError):
+                            continue
+                vram_usage['total_used'] = total_used
+        except Exception as e:
+            print(f"Warning: Could not get VRAM usage: {e}")
+        return vram_usage
+
     def monitor_vram_usage(self, duration: int) -> float:
-        """Monitor VRAM usage during benchmark"""
+        """Monitor VRAM usage during benchmark - handles multiple GPUs"""
         max_vram = 0
         start_time = time.time()
         
         while time.time() - start_time < duration:
             try:
-                # Use nvidia-smi to get VRAM usage
+                # Use nvidia-smi to get VRAM usage for all GPUs
                 result = subprocess.run(['nvidia-smi', '--query-gpu=memory.used', '--format=csv,noheader,nounits'], 
                                       capture_output=True, text=True, timeout=5)
                 if result.returncode == 0:
-                    vram_str = result.stdout.strip()
-                    if vram_str:
-                        current_vram = float(vram_str)
-                        max_vram = max(max_vram, current_vram)
+                    vram_lines = result.stdout.strip().split('\n')
+                    if vram_lines:
+                        # Calculate total VRAM usage across all GPUs
+                        total_vram = 0
+                        for line in vram_lines:
+                            if line.strip():
+                                try:
+                                    gpu_vram = float(line.strip())
+                                    total_vram += gpu_vram
+                                except ValueError:
+                                    continue
+                        max_vram = max(max_vram, total_vram)
                 time.sleep(1)
             except:
                 break
@@ -231,6 +270,9 @@ class OllamaBenchmark:
             vram_thread.join(timeout=5)
             vram_usage = getattr(self, '_max_vram', 0)
         
+        # Get final VRAM details for display
+        self._final_vram_details = self.get_current_vram_usage()
+        
         # Calculate metrics
         actual_duration = time.time() - start_time
         throughput = tokens_generated / actual_duration if actual_duration > 0 else 0
@@ -273,13 +315,25 @@ class OllamaBenchmark:
         """Save benchmark results to Excel file"""
         quantization = self.extract_quantization_info(model_name)
         
+        # Get per-GPU VRAM details if available
+        per_gpu_vram = ""
+        if hasattr(self, '_final_vram_details'):
+            vram_details = self._final_vram_details
+            gpu_details = []
+            for gpu_key, gpu_info in vram_details.items():
+                if gpu_key.startswith('gpu_'):
+                    gpu_id = gpu_key.split('_')[1]
+                    gpu_details.append(f"GPU{gpu_id}: {gpu_info['used']:.1f}MB")
+            per_gpu_vram = ", ".join(gpu_details) if gpu_details else ""
+        
         # Prepare data for Excel
         data = {
             'Timestamp': [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
             'LLM Model': [model_name],
             'Quantization': [quantization],
             'Software': [system_info['software']],
-            'VRAM Usage': [f"{benchmark_results['vram_usage']:.2f} MB"],
+            'VRAM Usage (Total)': [f"{benchmark_results['vram_usage']:.2f} MB"],
+            'VRAM Usage (Per GPU)': [per_gpu_vram],
             'Throughput (tokens/s)': [f"{benchmark_results['throughput']:.2f}"],
             'Latency (ms/token)': [f"{benchmark_results['latency']:.2f}"],
             'GPU': [system_info['gpu']],
@@ -327,12 +381,51 @@ class OllamaBenchmark:
         print("-" * 60)
         print(f"Throughput: {benchmark_results['throughput']:.2f} tokens/s")
         print(f"Latency: {benchmark_results['latency']:.2f} ms/token")
-        print(f"VRAM Usage: {benchmark_results['vram_usage']:.2f} MB")
+        print(f"VRAM Usage (Total): {benchmark_results['vram_usage']:.2f} MB")
+        
+        # Show per-GPU VRAM usage if available
+        if hasattr(self, '_final_vram_details'):
+            vram_details = self._final_vram_details
+            if len(vram_details) > 1:  # More than just 'total_used'
+                print("Per-GPU VRAM Usage:")
+                for gpu_key, gpu_info in vram_details.items():
+                    if gpu_key.startswith('gpu_'):
+                        gpu_id = gpu_key.split('_')[1]
+                        print(f"  GPU {gpu_id}: {gpu_info['used']:.2f} MB / {gpu_info['total']:.2f} MB ({gpu_info['utilization']:.1f}%)")
+        
         print(f"Total Tokens: {benchmark_results['tokens_generated']}")
         print(f"Test Duration: {benchmark_results['total_time']:.2f} seconds")
         print(f"Requests Made: {benchmark_results['request_count']}")
         print("=" * 60)
     
+    def test_vram_monitoring(self):
+        """Test VRAM monitoring functionality - useful for debugging multi-GPU setups"""
+        print("Testing VRAM monitoring...")
+        print("-" * 40)
+        
+        # Test current VRAM usage
+        vram_details = self.get_current_vram_usage()
+        if vram_details:
+            print("Current VRAM Usage:")
+            total_gpus = 0
+            for gpu_key, gpu_info in vram_details.items():
+                if gpu_key.startswith('gpu_'):
+                    gpu_id = gpu_key.split('_')[1]
+                    print(f"  GPU {gpu_id}: {gpu_info['used']:.2f} MB / {gpu_info['total']:.2f} MB ({gpu_info['utilization']:.1f}%)")
+                    total_gpus += 1
+            
+            if 'total_used' in vram_details:
+                print(f"Total VRAM Used: {vram_details['total_used']:.2f} MB across {total_gpus} GPUs")
+            
+            # Test monitoring for 5 seconds
+            print("\nTesting 5-second monitoring...")
+            max_vram = self.monitor_vram_usage(5)
+            print(f"Maximum VRAM usage during test: {max_vram:.2f} MB")
+        else:
+            print("No VRAM usage detected. Make sure NVIDIA drivers are installed and GPUs are available.")
+        
+        print("-" * 40)
+
     def run(self):
         """Main application loop"""
         print("Ollama Benchmark Tool")
@@ -379,6 +472,14 @@ class OllamaBenchmark:
 def main():
     """Main entry point"""
     try:
+        # Check for test argument
+        if len(sys.argv) > 1 and sys.argv[1] == '--test-vram':
+            print("VRAM Monitoring Test Mode")
+            print("=" * 30)
+            benchmark = OllamaBenchmark()
+            benchmark.test_vram_monitoring()
+            return
+        
         # Check required packages
         required_packages = ['requests', 'pandas', 'psutil', 'openpyxl']
         missing_packages = []
