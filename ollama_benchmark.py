@@ -186,11 +186,47 @@ class OllamaBenchmark:
         
         return max_vram
     
+    def unload_model(self, model_name: str) -> bool:
+        """Unload all models by restarting Ollama Docker container"""
+        try:
+            print("Stopping Ollama Docker container to unload all models...")
+            # Stop the Ollama container
+            stop_result = subprocess.run(['docker', 'stop', 'ollama'], 
+                                       capture_output=True, text=True, timeout=30)
+            
+            if stop_result.returncode == 0:
+                print("Starting Ollama Docker container...")
+                # Start the container again
+                start_result = subprocess.run(['docker', 'start', 'ollama'], 
+                                            capture_output=True, text=True, timeout=30)
+                
+                if start_result.returncode == 0:
+                    print("Waiting 20 seconds for Ollama to wake up...")
+                    time.sleep(20)
+                    return True
+                else:
+                    print(f"Failed to start Ollama container: {start_result.stderr}")
+                    return False
+            else:
+                print(f"Failed to stop Ollama container: {stop_result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            print("Timeout while restarting Ollama container")
+            return False
+        except Exception as e:
+            print(f"Warning: Could not restart Ollama container: {e}")
+            return False
+    
     def run_benchmark(self, model_name: str) -> Dict[str, Any]:
         """Run benchmark on selected model"""
         print(f"\nStarting benchmark for model: {model_name}")
         print(f"Duration: {self.test_duration} seconds")
         print("=" * 50)
+        
+        # Unload any previous model for accurate VRAM measurements
+        print("Unloading previous models...")
+        self.unload_model(model_name)
         
         # Test prompt for consistent benchmarking
         test_prompt = """Write a detailed explanation of machine learning, including its applications, 
