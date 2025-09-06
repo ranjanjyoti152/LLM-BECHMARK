@@ -10,6 +10,7 @@ A Python application to benchmark Ollama models on your local machine and save r
 - **System Information**: Automatically detects GPU, driver, and CUDA versions
 - **Excel Export**: Saves results with all required metrics to an Excel file
 - **Progress Tracking**: Shows real-time progress during benchmarking
+- **Docker-based Model Offloading**: Automatically unloads previous models for accurate VRAM measurements
 
 ## Metrics Collected
 
@@ -30,6 +31,30 @@ The tool collects and saves the following metrics:
 1. **Ollama installed and running**: Make sure Ollama is installed and running on your system
 2. **Python 3.7+**: Required for the application
 3. **NVIDIA GPU** (optional): For GPU benchmarking and VRAM monitoring
+4. **Docker** (recommended): For accurate model offloading and VRAM measurements
+
+## Docker-based Model Offloading
+
+For the most accurate benchmark results, the tool now uses Docker to completely unload all models before each benchmark:
+
+- **Automatic Container Restart**: Stops and restarts the Ollama Docker container
+- **Clean Memory State**: Ensures no previous models interfere with VRAM measurements
+- **20-Second Warm-up**: Waits for Ollama to fully initialize after restart
+- **Accurate Results**: Provides the most precise VRAM usage and performance metrics
+
+### Docker Setup (Recommended)
+
+1. **Run Ollama in Docker**:
+```bash
+docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+```
+
+2. **Verify container is running**:
+```bash
+docker ps | grep ollama
+```
+
+The benchmark tool will automatically handle model offloading when Docker is used.
 
 ## Installation
 
@@ -62,13 +87,15 @@ ollama pull mistral
 python ollama_benchmark.py
 ```
 
-2. **Select a model**: The app will display all available models. Choose one by entering its number.
+2. **Model Offloading**: If using Docker, the app will automatically restart the Ollama container to unload previous models for accurate measurements.
 
-3. **Confirm benchmark**: The app will ask for confirmation before starting the 2-minute benchmark.
+3. **Select a model**: The app will display all available models. Choose one by entering its number.
 
-4. **Wait for completion**: The benchmark will run for 2 minutes, showing progress.
+4. **Confirm benchmark**: The app will ask for confirmation before starting the 2-minute benchmark.
 
-5. **View results**: Results will be displayed on screen and automatically saved to `ollama_benchmark_results.xlsx`.
+5. **Wait for completion**: The benchmark will run for 2 minutes, showing progress.
+
+6. **View results**: Results will be displayed on screen and automatically saved to `ollama_benchmark_results.xlsx`.
 
 ## Output
 
@@ -150,6 +177,12 @@ Results saved to: ollama_benchmark_results.xlsx
 - Make sure you have write permissions in the directory
 - The app will fallback to CSV if Excel writing fails
 
+### Docker Issues
+- Ensure Ollama container is named 'ollama': `docker ps`
+- Check Docker permissions: `docker --version`
+- For GPU support, ensure `--gpus=all` flag is used when starting container
+- Model offloading will be skipped if Docker commands fail
+
 ### No Models Found
 - Install models: `ollama pull <model_name>`
 - Check available models: `ollama list`
@@ -161,3 +194,4 @@ Results saved to: ollama_benchmark_results.xlsx
 - VRAM monitoring requires GPUtil and may not work on all systems
 - Results are appended to the Excel file, allowing historical tracking
 - The application handles timeouts and errors gracefully
+- **Docker offloading**: For most accurate results, run Ollama in Docker - the tool will automatically restart the container before each benchmark
