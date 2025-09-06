@@ -6,6 +6,7 @@ A Python application to benchmark Ollama models on your local machine and save r
 
 - **Automatic Model Discovery**: Fetches all available models from your local Ollama installation
 - **Interactive Model Selection**: Choose which model to benchmark from a list
+- **Batch Benchmarking**: Automatically benchmark all available models with `--all` flag
 - **Comprehensive Benchmarking**: Runs for 2 minutes at full potential
 - **System Information**: Automatically detects GPU, driver, and CUDA versions
 - **Excel Export**: Saves results with all required metrics to an Excel file
@@ -80,8 +81,15 @@ ollama pull mistral
 # etc.
 ```
 
-## Usage
+## Command Line Options
 
+The tool supports several command line options:
+
+- **Normal mode**: `python ollama_benchmark.py` (interactive single model selection)
+- **Batch mode**: `python ollama_benchmark.py --all` (benchmark all available models automatically)
+- **VRAM test**: `python ollama_benchmark.py --test-vram` (test VRAM monitoring functionality)
+
+### Single Model Benchmark (Interactive)
 1. **Run the application**:
 ```bash
 python ollama_benchmark.py
@@ -96,6 +104,20 @@ python ollama_benchmark.py
 5. **Wait for completion**: The benchmark will run for 2 minutes, showing progress.
 
 6. **View results**: Results will be displayed on screen and automatically saved to `ollama_benchmark_results.xlsx`.
+
+### Batch Benchmark All Models (Automatic)
+1. **Run batch mode**:
+```bash
+python ollama_benchmark.py --all
+```
+
+2. **Automatic execution**: The tool will automatically benchmark all available models one by one.
+
+3. **Progress tracking**: Shows progress for each model with format `[current/total]`.
+
+4. **Results**: All results are saved to the Excel file with timestamps.
+
+5. **Interruption**: You can interrupt the batch process at any time with Ctrl+C.
 
 ## Output
 

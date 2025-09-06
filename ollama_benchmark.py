@@ -463,7 +463,7 @@ class OllamaBenchmark:
         print("-" * 40)
 
     def run(self):
-        """Main application loop"""
+        """Main application loop for interactive single model benchmarking"""
         print("Ollama Benchmark Tool")
         print("=" * 30)
         
@@ -505,6 +505,72 @@ class OllamaBenchmark:
         self.display_results(selected_model, benchmark_results, system_info)
         self.save_results(selected_model, benchmark_results, system_info)
 
+    def run_all_benchmarks(self):
+        """Run benchmarks on all available models automatically"""
+        print("Ollama Batch Benchmark Tool")
+        print("=" * 35)
+        
+        # Check Ollama connection
+        if not self.check_ollama_connection():
+            print("Error: Cannot connect to Ollama. Make sure Ollama is running on localhost:11434")
+            return
+        
+        print("✓ Connected to Ollama")
+        
+        # Get system information
+        system_info = self.get_system_info()
+        print(f"✓ System info collected - GPU: {system_info['gpu']}")
+        
+        # Get available models
+        models = self.get_available_models()
+        if not models:
+            print("No models found. Please install some models first using 'ollama pull <model_name>'")
+            return
+        
+        print(f"\nFound {len(models)} models. Starting automatic benchmarking...")
+        print("=" * 60)
+        
+        # Run benchmark for each model
+        successful_benchmarks = 0
+        failed_benchmarks = 0
+        
+        for i, model in enumerate(models):
+            model_name = model.get('name', 'Unknown')
+            size = model.get('size', 0)
+            size_gb = size / (1024**3) if size > 0 else 0
+            
+            print(f"\n[{i + 1}/{len(models)}] Benchmarking: {model_name} ({size_gb:.2f} GB)")
+            print("-" * 60)
+            
+            try:
+                # Run benchmark
+                benchmark_results = self.run_benchmark(model_name)
+                
+                # Display and save results
+                self.display_results(model_name, benchmark_results, system_info)
+                self.save_results(model_name, benchmark_results, system_info)
+                
+                successful_benchmarks += 1
+                print(f"✓ Completed benchmark for {model_name}")
+                
+            except KeyboardInterrupt:
+                print(f"\n⚠ Benchmark interrupted for {model_name}")
+                break
+            except Exception as e:
+                print(f"✗ Failed to benchmark {model_name}: {e}")
+                failed_benchmarks += 1
+                continue
+        
+        # Summary
+        print("\n" + "=" * 60)
+        print("BATCH BENCHMARK SUMMARY")
+        print("=" * 60)
+        print(f"Total Models: {len(models)}")
+        print(f"Successful: {successful_benchmarks}")
+        print(f"Failed: {failed_benchmarks}")
+        print(f"Results saved to: {self.benchmark_file}")
+        print("=" * 60)
+
 def main():
     """Main entry point"""
     try:
@@ -514,6 +580,14 @@ def main():
             print("=" * 30)
             benchmark = OllamaBenchmark()
             benchmark.test_vram_monitoring()
+            return
+        
+        # Check for batch benchmark argument
+        if len(sys.argv) > 1 and sys.argv[1] == '--all':
+            print("Batch Benchmark Mode - Testing all available models")
+            print("=" * 50)
+            benchmark = OllamaBenchmark()
+            benchmark.run_all_benchmarks()
             return
         
         # Check required packages
